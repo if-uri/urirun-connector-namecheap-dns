@@ -24,10 +24,12 @@ Repository = "https://github.com/if-uri/urirun-connector-namecheap-dns"
 [project.scripts]
 urirun-namecheap-dns = "urirun_connector_namecheap_dns.cli:main"
 
+[project.entry-points."urirun.bindings"]
+namecheap-dns = "urirun_connector_namecheap_dns:urirun_bindings"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["urirun_connector_namecheap_dns*"]
 
 [tool.setuptools.package-data]
 urirun_connector_namecheap_dns = ["connector.manifest.json"]
-

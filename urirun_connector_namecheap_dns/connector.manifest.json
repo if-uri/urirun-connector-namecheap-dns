@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "summary": "Safe DNS plan, backup and apply routes for Namecheap host records.",
   "repository": "https://github.com/if-uri/urirun-connector-namecheap-dns",
-  "install": "pip install git+https://github.com/if-uri/urirun-connector-namecheap-dns.git@v0.1.0",
+  "install": {
+    "mode": "urirun-extra",
+    "pipSpec": "urirun-connector-namecheap-dns @ git+https://github.com/if-uri/urirun-connector-namecheap-dns.git@v0.1.0"
+  },
   "routes": [
     "dns://host/records/query/current",
     "dns://host/records/query/expected",
@@ -12,7 +15,9 @@
     "dns://host/records/command/backup",
     "dns://host/records/command/apply"
   ],
-  "adapterKinds": ["argv-template"],
+  "adapterKinds": [
+    "argv-template"
+  ],
   "examples": [
     {
       "uri": "dns://host/records/command/plan",
@@ -41,4 +46,3 @@
     }
   ]
 }
-
