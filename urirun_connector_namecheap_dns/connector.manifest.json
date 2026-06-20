@@ -1,8 +1,12 @@
 {
   "id": "namecheap-dns",
   "name": "Namecheap DNS",
+  "status": "available",
   "version": "0.1.0",
   "summary": "Safe DNS plan, backup and apply routes for Namecheap host records.",
+  "uriSchemes": [
+    "dns"
+  ],
   "repository": "https://github.com/if-uri/urirun-connector-namecheap-dns",
   "install": {
     "mode": "urirun-extra",

@@ -2,6 +2,8 @@
 
 - [x] Extract Namecheap DNS plan/backup/apply into an external connector.
 - [x] Add local tests and Docker smoke coverage for mock DNS flows.
+- [x] Expose `urirun_bindings()` through the stable `urirun.bindings`
+      entry-point group.
 - [ ] Add this connector to IFURI-016 full host-node Docker matrix in safe
       dry-run/mock mode.
 - [ ] Add environment-gated sandbox API integration tests.

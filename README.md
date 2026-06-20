@@ -35,6 +35,14 @@ urirun run 'dns://host/records/command/plan' registry.json \
   --allow 'dns://host/*'
 ```
 
+After installation, `urirun` can discover this connector automatically through
+the `urirun.bindings` entry-point group:
+
+```bash
+urirun discover --out connectors.bindings.json --registry-out connectors.registry.json
+urirun list --entry-points
+```
+
 For real API calls configure:
 
 ```bash
@@ -62,4 +70,3 @@ make docker-test
 - Domain flow connector: [if-uri/urirun-connector-domain-monitor](https://github.com/if-uri/urirun-connector-domain-monitor)
 
 Repository notes: [TODO.md](TODO.md) · [CHANGELOG.md](CHANGELOG.md)
-
