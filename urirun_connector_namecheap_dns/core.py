@@ -9,7 +9,6 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -25,16 +24,8 @@ API_SANDBOX = "https://api.sandbox.namecheap.com/xml.response"
 SUPPORTED_RECORD_KEYS = ("Name", "Type", "Address", "TTL", "MXPref", "EmailType", "Flag", "Tag")
 
 
-def _json_resource(name: str) -> dict[str, Any]:
-    text = resources.files(__package__).joinpath(name).read_text(encoding="utf-8")
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError(f"{name} must contain a JSON object")
-    return data
-
-
 def connector_manifest() -> dict[str, Any]:
-    return _json_resource("connector.manifest.json")
+    return urirun.load_manifest(__package__)
 
 
 def _json_value(value: Any, default: Any):
