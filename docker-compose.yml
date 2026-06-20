@@ -1,0 +1,12 @@
+services:
+  tester:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    networks:
+      - connector-test
+
+networks:
+  connector-test:
+    driver: bridge
+
