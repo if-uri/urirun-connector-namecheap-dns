@@ -70,3 +70,7 @@ make docker-test
 - Domain flow connector: [if-uri/urirun-connector-domain-monitor](https://github.com/if-uri/urirun-connector-domain-monitor)
 
 Repository notes: [TODO.md](TODO.md) · [CHANGELOG.md](CHANGELOG.md)
+
+## License
+
+Released under the terms in [LICENSE](LICENSE).
