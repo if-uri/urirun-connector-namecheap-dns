@@ -9,6 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +19,13 @@ import urirun
 CONNECTOR_ID = "namecheap-dns"
 DNS = urirun.connector(CONNECTOR_ID, scheme="dns")
 
+# argv prefix the compiled registry uses to execute a route out-of-process.
+_EXEC = ["python3", "-m", "urirun_connector_namecheap_dns._exec"]
+
 API_TIMEOUT_SECONDS = 30
 API_PROD = "https://api.namecheap.com/xml.response"
 API_SANDBOX = "https://api.sandbox.namecheap.com/xml.response"
 SUPPORTED_RECORD_KEYS = ("Name", "Type", "Address", "TTL", "MXPref", "EmailType", "Flag", "Tag")
-
-
-def connector_manifest() -> dict[str, Any]:
-    return urirun.load_manifest(__package__)
 
 
 def _json_value(value: Any, default: Any):
@@ -217,6 +217,11 @@ def expected_records(expected_records: str = "", expected_a: str = "", expected_
     if expected_aaaa:
         expected["AAAA"] = _list(expected_aaaa)
     return {str(key).upper(): _list(value) for key, value in expected.items() if _list(value)}
+
+
+# Module-level alias so helpers can compute expected records without the
+# ``expected_records`` parameter name shadowing the function above.
+_compute_expected_records = expected_records
 
 
 def desired_from_payload(current: list[dict[str, str]], payload: dict[str, Any]) -> list[dict[str, str]]:
@@ -435,7 +440,7 @@ def expected(expected_records: str = "", expected_a: str = "", expected_aaaa: st
 
 
 def expected_records_fn(expected_records: str = "", expected_a: str = "", expected_aaaa: str = "") -> dict[str, list[str]]:
-    return expected_records(expected_records=expected_records, expected_a=expected_a, expected_aaaa=expected_aaaa)
+    return _compute_expected_records(expected_records=expected_records, expected_a=expected_a, expected_aaaa=expected_aaaa)
 
 
 def run_action(action: str, **kwargs: Any) -> dict[str, Any]:
@@ -458,31 +463,75 @@ def run_action(action: str, **kwargs: Any) -> dict[str, Any]:
     return table[action](**kwargs)
 
 
+def run_route(command: str, **kwargs: Any) -> dict[str, Any]:
+    """Run one route's logic by its CLI/exec subcommand name.
+
+    Shared dispatcher used by both the console-script ``main`` and the
+    out-of-process ``_exec`` executor, mapping each subcommand to the same
+    per-route function the old ``cli.py`` dispatch called via ``run_action``.
+    """
+    return run_action(command, **kwargs)
+
+
 @DNS.command("records/query/current", meta={"label": "Current Namecheap DNS records"})
 def current_command(domain: str = "", current_records: str = "", mock_records: str = "", profile: str = "") -> list[str]:
-    return ["urirun-namecheap-dns", "current", "--domain", "{domain}", "--current-records", "{current_records}", "--mock-records", "{mock_records}", "--profile", "{profile}"]
+    return [*_EXEC, "current", "--domain", "{domain}", "--current-records", "{current_records}", "--mock-records", "{mock_records}", "--profile", "{profile}"]
 
 
 @DNS.command("records/query/expected", meta={"label": "Expected DNS records"})
 def expected_command(expected_records: str = "", expected_a: str = "", expected_aaaa: str = "") -> list[str]:
-    return ["urirun-namecheap-dns", "expected", "--expected-records", "{expected_records}", "--expected-a", "{expected_a}", "--expected-aaaa", "{expected_aaaa}"]
+    return [*_EXEC, "expected", "--expected-records", "{expected_records}", "--expected-a", "{expected_a}", "--expected-aaaa", "{expected_aaaa}"]
 
 
 @DNS.command("records/command/plan", meta={"label": "Plan Namecheap DNS changes"})
 def plan_command(domain: str = "", current_records: str = "", desired_records: str = "", ensure_records: str = "", remove_records: str = "", mock_records: str = "", profile: str = "") -> list[str]:
-    return ["urirun-namecheap-dns", "plan", "--domain", "{domain}", "--current-records", "{current_records}", "--desired-records", "{desired_records}", "--ensure-records", "{ensure_records}", "--remove-records", "{remove_records}", "--mock-records", "{mock_records}", "--profile", "{profile}"]
+    return [*_EXEC, "plan", "--domain", "{domain}", "--current-records", "{current_records}", "--desired-records", "{desired_records}", "--ensure-records", "{ensure_records}", "--remove-records", "{remove_records}", "--mock-records", "{mock_records}", "--profile", "{profile}"]
 
 
 @DNS.command("records/command/backup", meta={"label": "Backup Namecheap DNS records"})
 def backup_command(domain: str = "", current_records: str = "", mock_records: str = "", backup_dir: str = "", profile: str = "") -> list[str]:
-    return ["urirun-namecheap-dns", "backup", "--domain", "{domain}", "--current-records", "{current_records}", "--mock-records", "{mock_records}", "--backup-dir", "{backup_dir}", "--profile", "{profile}"]
+    return [*_EXEC, "backup", "--domain", "{domain}", "--current-records", "{current_records}", "--mock-records", "{mock_records}", "--backup-dir", "{backup_dir}", "--profile", "{profile}"]
 
 
 @DNS.command("records/command/apply", meta={"label": "Apply Namecheap DNS changes"})
 def apply_command(domain: str = "", current_records: str = "", desired_records: str = "", plan: str = "", backup_uri: str = "", confirm: bool = False, mock_apply: bool = True, allow_current_drift: bool = False, profile: str = "") -> list[str]:
-    return ["urirun-namecheap-dns", "apply", "--domain", "{domain}", "--current-records", "{current_records}", "--desired-records", "{desired_records}", "--plan", "{plan}", "--backup-uri", "{backup_uri}", "--confirm", "{confirm}", "--mock-apply", "{mock_apply}", "--allow-current-drift", "{allow_current_drift}", "--profile", "{profile}"]
+    return [*_EXEC, "apply", "--domain", "{domain}", "--current-records", "{current_records}", "--desired-records", "{desired_records}", "--plan", "{plan}", "--backup-uri", "{backup_uri}", "--confirm", "{confirm}", "--mock-apply", "{mock_apply}", "--allow-current-drift", "{allow_current_drift}", "--profile", "{profile}"]
 
 
 def urirun_bindings() -> dict[str, Any]:
+    """Serializable v2 bindings for this connector (entry point: urirun.bindings)."""
     return urirun.connector_bindings(connector=CONNECTOR_ID)
+
+
+def connector_manifest() -> dict[str, Any]:
+    """Manifest prose (connector.manifest.json) merged with the derived route set."""
+    text = resources.files(__package__).joinpath("connector.manifest.json").read_text(encoding="utf-8")
+    manifest = json.loads(text)
+    bindings = urirun_bindings()["bindings"]
+    manifest["routes"] = sorted(bindings)
+    manifest["uriSchemes"] = sorted({uri.split("://", 1)[0] for uri in bindings})
+    return manifest
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Console-script entry point: ``bindings``/``manifest`` plus the route
+    subcommands (delegated to the out-of-process executor)."""
+    import sys
+
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "bindings":
+        print(json.dumps(urirun_bindings(), indent=2))
+        return 0
+    if args and args[0] == "manifest":
+        print(json.dumps(connector_manifest(), indent=2))
+        return 0
+    from ._exec import main as _exec_main
+
+    return _exec_main(args)
+
+
+if __name__ == "__main__":
+    import sys
+
+    raise SystemExit(main(sys.argv[1:]))
 

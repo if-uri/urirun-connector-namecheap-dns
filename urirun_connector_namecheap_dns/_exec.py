@@ -1,16 +1,21 @@
 # Author: Tom Sapletta · https://tom.sapletta.com
 # Part of the ifURI solution.
 
+"""Out-of-process executor for namecheap-dns routes.
+
+The compiled v2 registry runs each route as an ``argv`` template that invokes
+``python3 -m urirun_connector_namecheap_dns._exec <subcommand> ...``. urirun only
+spawns this template under ``--execute``, so this module always runs the route
+logic (via ``core.run_route``) and prints the connector's JSON result to stdout.
+"""
+
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
-import urirun
-
-from .core import connector_manifest, run_action, urirun_bindings
-
-
+from . import core
 
 
 def _bool_text(value: str) -> bool:
@@ -33,7 +38,9 @@ def _add_expected(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--expected-aaaa", default="")
 
 
-def register(sub) -> None:
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="urirun_connector_namecheap_dns._exec")
+    sub = parser.add_subparsers(dest="command", required=True)
 
     current = sub.add_parser("current", help="Read current Namecheap DNS records")
     _add_domain(current)
@@ -64,29 +71,19 @@ def register(sub) -> None:
     apply.add_argument("--mock-apply", type=_bool_text, default=True)
     apply.add_argument("--allow-current-drift", type=_bool_text, default=False)
     apply.add_argument("--profile", default="")
-
-
-def dispatch(args) -> int:
-    data = vars(args)
-    command = data.pop("command")
-    try:
-        result = run_action(command, **data)
-    except Exception as exc:  # noqa: BLE001 - connector CLI reports JSON errors.
-        urirun.connector_emit({"ok": False, "connector": "namecheap-dns", "action": command, "error": str(exc)})
-        return 2
-    urirun.connector_emit(result)
-    return 0 if result.get("ok") else 2
+    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    return urirun.connector_cli(
-        "urirun-namecheap-dns",
-        manifest=connector_manifest,
-        bindings=urirun_bindings,
-        register=register,
-        dispatch=dispatch,
-        argv=argv,
-    )
+    args = _build_parser().parse_args(argv)
+    kwargs = {k: v for k, v in vars(args).items() if k != "command"}
+    try:
+        result = core.run_route(args.command, **kwargs)
+    except Exception as exc:  # noqa: BLE001 - connector exec reports JSON errors.
+        print(json.dumps({"ok": False, "connector": core.CONNECTOR_ID, "action": args.command, "error": str(exc)}))
+        return 2
+    print(json.dumps(result))
+    return 0 if result.get("ok") else 2
 
 
 if __name__ == "__main__":
