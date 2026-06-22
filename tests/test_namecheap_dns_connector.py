@@ -7,20 +7,23 @@ import json
 import tempfile
 from pathlib import Path
 
+import urirun
 from urirun import v2
 from urirun_connector_namecheap_dns import (
     apply,
+    apply_route,
     backup,
+    backup_route,
     connector_manifest,
+    current_route,
     diff_records,
+    expected_route,
     main,
     normalize_records,
     plan,
-    run_route,
+    plan_route,
     urirun_bindings,
 )
-from urirun_connector_namecheap_dns import _exec
-
 
 ROUTE_PLAN = "dns://host/records/command/plan"
 ROUTE_BACKUP = "dns://host/records/command/backup"
@@ -32,38 +35,15 @@ ALL_ROUTES = {ROUTE_PLAN, ROUTE_BACKUP, ROUTE_APPLY, ROUTE_CURRENT, ROUTE_EXPECT
 CURRENT = [{"Name": "@", "Type": "A", "Address": "203.0.113.10", "TTL": 1800}]
 DESIRED = [{"Name": "@", "Type": "A", "Address": "203.0.113.11", "TTL": 1800}]
 
-
-def _registry():
-    return v2.compile_registry(urirun_bindings())
+MODULE = "urirun_connector_namecheap_dns.core"
 
 
-def test_bindings_are_argv_template_via_exec() -> None:
-    route = urirun_bindings()["bindings"][ROUTE_PLAN]
-    assert route["adapter"] == "argv-template"
-    assert route["argv"][:5] == [
-        "python3", "-m", "urirun_connector_namecheap_dns._exec", "plan", "--domain",
-    ]
-    json.dumps(urirun_bindings())  # serializable
-
-
-def test_compiles_and_routes_present() -> None:
-    routes = {r["uri"] for r in v2.list_routes(_registry())}
-    assert ALL_ROUTES <= routes
-
-
-def test_manifest_prose_plus_derived_routes() -> None:
-    manifest = connector_manifest()
-    assert manifest["id"] == "namecheap-dns"
-    assert set(manifest["routes"]) == ALL_ROUTES
-    assert manifest["uriSchemes"] == ["dns"]
-    assert manifest["summary"]  # prose preserved
-
+# --- real impl functions called directly (offline) -------------------------
 
 def test_record_normalization_and_diff() -> None:
     current = normalize_records(CURRENT)
     desired = normalize_records(DESIRED)
     diff = diff_records(current, desired)
-
     assert current[0]["Type"] == "A"
     assert diff["changed"] is True
     assert diff["added"][0]["Address"] == "203.0.113.11"
@@ -92,61 +72,98 @@ def test_offline_plan_backup_apply_return_dicts() -> None:
         assert applied["mock"] is True
 
 
-def test_run_route_dispatch_offline() -> None:
-    result = run_route(
-        "plan",
-        domain="example.com",
-        current_records=json.dumps(CURRENT),
-        desired_records=json.dumps(DESIRED),
-    )
-    assert result["ok"] is True
-    assert result["action"] == "plan"
-
-
-def test_no_real_api_call_on_offline_routes(monkeypatch) -> None:
+def test_handlers_offline(monkeypatch) -> None:
+    # Handlers must compute from payload mock/supplied records, never the API.
     from urirun_connector_namecheap_dns import core
 
     def _boom(*_args, **_kwargs):
         raise AssertionError("real Namecheap API must not be called offline")
 
     monkeypatch.setattr(core, "request_api", _boom)
-    result = run_route("expected", expected_a="203.0.113.10")
-    assert result["ok"] is True
-    assert result["expectedRecords"]["A"] == ["203.0.113.10"]
+
+    plan_result = plan_route(
+        domain="example.com",
+        current_records=json.dumps(CURRENT),
+        desired_records=json.dumps(DESIRED),
+    )
+    assert plan_result["ok"] is True
+    assert plan_result["action"] == "plan"
+    assert plan_result["diff"]["changed"] is True
+
+    expected_result = expected_route(expected_a="203.0.113.10")
+    assert expected_result["ok"] is True
+    assert expected_result["expectedRecords"]["A"] == ["203.0.113.10"]
+
+    current_result = current_route(mock_records=json.dumps(CURRENT))
+    assert current_result["ok"] is True
+    assert current_result["action"] == "current"
+    assert current_result["records"][0]["Address"] == "203.0.113.10"
 
 
-def test_exec_emits_json_for_offline_route(capsys) -> None:
-    rc = _exec.main([
-        "plan",
-        "--domain", "example.com",
-        "--current-records", json.dumps(CURRENT),
-        "--desired-records", json.dumps(DESIRED),
-    ])
-    assert rc == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out["ok"] is True
-    assert out["diff"]["changed"] is True
+# --- v2 authoring contract: isolated handlers (registry-portable) ----------
 
+def test_bindings_are_isolated_handlers() -> None:
+    b = urirun_bindings()["bindings"]
+    assert set(b) == ALL_ROUTES
+    for route, export in (
+        (ROUTE_CURRENT, "current_route"),
+        (ROUTE_EXPECTED, "expected_route"),
+        (ROUTE_PLAN, "plan_route"),
+        (ROUTE_BACKUP, "backup_route"),
+        (ROUTE_APPLY, "apply_route"),
+    ):
+        # registry-portable in-process handler: runs out-of-process via urirun.exec
+        assert b[route]["adapter"] == "local-function-subprocess"
+        assert b[route]["python"]["module"] == MODULE
+        assert b[route]["python"]["export"] == export
+        assert "argv" not in b[route]
+    plan_props = b[ROUTE_PLAN]["inputSchema"]["properties"]
+    assert {"domain", "current_records", "desired_records", "ensure_records", "remove_records", "mock_records", "profile"} <= set(plan_props)
+    json.dumps(urirun_bindings())  # serializable: no live ref leaks
+
+
+def test_compiles_and_routes_present() -> None:
+    registry = urirun.compile_registry(urirun_bindings())
+    uris = {r["uri"] for r in urirun.list_routes(registry)}
+    assert ALL_ROUTES <= uris
+
+
+def test_runtime_executes_from_compiled_registry() -> None:
+    # the whole point: a serialized->compiled registry still runs the offline route
+    registry = urirun.compile_registry(json.loads(json.dumps(urirun_bindings())))
+    policy = urirun.policy(allow=["dns://*"])
+
+    env = v2.run(
+        ROUTE_PLAN,
+        registry,
+        payload={
+            "domain": "example.com",
+            "current_records": json.dumps(CURRENT),
+            "desired_records": json.dumps(DESIRED),
+        },
+        mode="execute",
+        policy=policy,
+    )
+    assert env["ok"] is True, env
+    data = urirun.result_data(env)
+    assert data["ok"] is True
+    assert data["diff"]["changed"] is True
+
+
+def test_manifest_prose_plus_derived_routes() -> None:
+    m = connector_manifest()
+    assert m["id"] == "namecheap-dns"
+    assert set(m["routes"]) == ALL_ROUTES
+    assert m["uriSchemes"] == ["dns"]
+    assert m["summary"]  # prose preserved
+    assert m["install"]["mode"] == "urirun-extra"
+    json.dumps(m)
+
+
+# --- CLI -------------------------------------------------------------------
 
 def test_cli_bindings_and_manifest(capsys) -> None:
     assert main(["bindings"]) == 0
     assert ROUTE_PLAN in json.loads(capsys.readouterr().out)["bindings"]
     assert main(["manifest"]) == 0
     assert json.loads(capsys.readouterr().out)["id"] == "namecheap-dns"
-
-
-def test_compiled_registry_run_offline_plan() -> None:
-    result = v2.run(
-        ROUTE_PLAN,
-        _registry(),
-        {
-            "domain": "example.com",
-            "current_records": json.dumps(CURRENT),
-            "desired_records": json.dumps(DESIRED),
-        },
-        mode="execute",
-        policy={"execute": {"allow": ["dns://host/*"]}},
-    )
-    assert result["ok"] is True, result
-    stdout = json.loads(result["result"]["stdout"])
-    assert stdout["diff"]["changed"] is True
