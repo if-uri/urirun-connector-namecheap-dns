@@ -95,9 +95,23 @@ def env_name(profile: str | None, name: str) -> str:
 def config_from_env(profile: str | None = None, env: dict | None = None) -> dict[str, Any]:
     env = env or os.environ
     sandbox = env.get(env_name(profile, "SANDBOX"), env.get("NAMECHEAP_SANDBOX", "false")).lower() in {"1", "true", "yes", "on"}
+    # The API key is addressed by reference: NAMECHEAP_API_KEY may hold the literal key OR a
+    # secret reference (``secret://keyring/namecheap#key``, ``getv://NAMECHEAP_API_KEY``),
+    # resolved through the urirun secrets layer. The allow-list defaults to the reference
+    # itself (so a configured ref is honoured) and can be widened via NAMECHEAP_SECRET_ALLOW.
+    raw_key = env.get(env_name(profile, "API_KEY")) or env.get("NAMECHEAP_API_KEY") or ""
+    secret_allow = (
+        env.get(env_name(profile, "SECRET_ALLOW"))
+        or env.get("NAMECHEAP_SECRET_ALLOW")
+        or raw_key
+    )
+    try:
+        api_key = urirun.resolve_secret(raw_key, secret_allow)
+    except PermissionError as exc:
+        raise ValueError(f"Namecheap API key secret denied by policy (set NAMECHEAP_SECRET_ALLOW): {exc}") from exc
     config = {
         "api_user": env.get(env_name(profile, "API_USER")) or env.get("NAMECHEAP_API_USER"),
-        "api_key": env.get(env_name(profile, "API_KEY")) or env.get("NAMECHEAP_API_KEY"),
+        "api_key": api_key or None,
         "username": env.get(env_name(profile, "USERNAME")) or env.get("NAMECHEAP_USERNAME"),
         "client_ip": env.get(env_name(profile, "CLIENT_IP")) or env.get("NAMECHEAP_CLIENT_IP"),
         "sandbox": sandbox,

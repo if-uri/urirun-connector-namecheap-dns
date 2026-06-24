@@ -40,6 +40,32 @@ MODULE = "urirun_connector_namecheap_dns.core"
 
 # --- real impl functions called directly (offline) -------------------------
 
+def test_config_from_env_resolves_api_key_secret_reference(monkeypatch) -> None:
+    from urirun_connector_namecheap_dns import core
+
+    monkeypatch.setenv("NC_REAL_KEY", "live-api-key-xyz")
+    base = {
+        "NAMECHEAP_API_USER": "user", "NAMECHEAP_USERNAME": "user",
+        "NAMECHEAP_CLIENT_IP": "203.0.113.5",
+    }
+
+    # The env var holds a reference, not the key -> resolved via the secrets layer.
+    cfg = core.config_from_env(env={**base, "NAMECHEAP_API_KEY": "getv://NC_REAL_KEY"})
+    assert cfg["api_key"] == "live-api-key-xyz"
+
+    # A literal key still passes straight through (backward compatible).
+    cfg2 = core.config_from_env(env={**base, "NAMECHEAP_API_KEY": "literal-key"})
+    assert cfg2["api_key"] == "literal-key"
+
+    # An explicit allow-list that excludes the reference denies it (deny-by-default).
+    import pytest
+    with pytest.raises(ValueError, match="denied by policy"):
+        core.config_from_env(env={
+            **base, "NAMECHEAP_API_KEY": "getv://NC_REAL_KEY",
+            "NAMECHEAP_SECRET_ALLOW": "getv://SOMETHING_ELSE",
+        })
+
+
 def test_record_normalization_and_diff() -> None:
     current = normalize_records(CURRENT)
     desired = normalize_records(DESIRED)
