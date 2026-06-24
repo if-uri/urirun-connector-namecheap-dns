@@ -47,11 +47,23 @@ For real API calls configure:
 
 ```bash
 export NAMECHEAP_API_USER=...
-export NAMECHEAP_API_KEY=...
+export NAMECHEAP_API_KEY=...          # literal key, OR a secrets-layer reference (below)
 export NAMECHEAP_USERNAME=...
 export NAMECHEAP_CLIENT_IP=...
 export NAMECHEAP_SANDBOX=true
 ```
+
+`NAMECHEAP_API_KEY` is **addressed by reference**: instead of the literal key it may
+hold a urirun secrets-layer reference, resolved deny-by-default at use and never
+copied around:
+
+```bash
+export NAMECHEAP_API_KEY='secret://keyring/namecheap#key'   # value lives in the OS keyring
+# or: getv://NAMECHEAP_API_KEY_VALUE
+# the allow-list defaults to the reference itself; widen with NAMECHEAP_SECRET_ALLOW
+```
+
+Profile-scoped vars (`NAMECHEAP_<PROFILE>_API_KEY`, …) work the same way.
 
 ## Test
 
