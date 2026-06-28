@@ -9,7 +9,7 @@
         "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
         "action": "const:current", "domain": "str", "records": "list"
       },
-      "errors": ["credentials-missing", "api-error"],
+      "errors": ["unauthenticated", "degraded-backend"],
       "examples": [
         {
           "payload": { "domain": "example.com", "mock_records": "A:@:1.2.3.4" },
@@ -55,7 +55,7 @@
         "desiredRecords": "list", "diff": "obj",
         "requiresBackup": "const:true", "requiresConfirm": "const:true", "destructive": "bool"
       },
-      "errors": ["credentials-missing", "api-error"],
+      "errors": ["unauthenticated", "degraded-backend"],
       "examples": [
         {
           "payload": { "domain": "example.com", "expected_a": "1.2.3.4", "mock_records": "A:@:1.2.3.4" },
@@ -77,7 +77,7 @@
         "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
         "action": "const:backup", "domain": "str", "backup": "obj"
       },
-      "errors": ["credentials-missing", "api-error"],
+      "errors": ["unauthenticated", "degraded-backend"],
       "examples": [
         {
           "payload": { "domain": "example.com", "mock_records": "A:@:1.2.3.4" },
@@ -105,7 +105,7 @@
         "mock": "?bool", "method": "?str", "response": "?obj",
         "desiredRecords": "?list", "currentRecords": "?list"
       },
-      "errors": ["confirmation-required", "backup-required", "credentials-missing", "api-error"],
+      "errors": ["precondition-unmet", "unauthenticated", "degraded-backend"],
       "examples": [
         {
           "payload": { "domain": "example.com", "backup_uri": "artifact://b", "mock_apply": true },
