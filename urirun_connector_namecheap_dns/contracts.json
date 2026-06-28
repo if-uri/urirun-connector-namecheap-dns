@@ -1,0 +1,122 @@
+{
+  "contracts": {
+    "records/query/current": {
+      "version": "v1",
+      "effect": "query",
+      "reversible": false,
+      "inp": { "domain": "?str", "current_records": "?str", "mock_records": "?str", "profile": "?str" },
+      "out": {
+        "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
+        "action": "const:current", "domain": "str", "records": "list"
+      },
+      "errors": ["credentials-missing", "api-error"],
+      "examples": [
+        {
+          "payload": { "domain": "example.com", "mock_records": "A:@:1.2.3.4" },
+          "result": {
+            "ok": true, "connector": "namecheap-dns", "type": "namecheap-dns",
+            "action": "current", "domain": "example.com",
+            "records": [{ "Type": "A", "Name": "@", "Address": "1.2.3.4" }]
+          }
+        }
+      ]
+    },
+    "records/query/expected": {
+      "version": "v1",
+      "effect": "query",
+      "reversible": false,
+      "inp": { "expected_records": "?str", "expected_a": "?str", "expected_aaaa": "?str" },
+      "out": {
+        "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
+        "action": "const:expected", "expectedRecords": "obj"
+      },
+      "errors": [],
+      "examples": [
+        {
+          "payload": { "expected_a": "1.2.3.4" },
+          "result": {
+            "ok": true, "connector": "namecheap-dns", "type": "namecheap-dns",
+            "action": "expected", "expectedRecords": { "A": ["1.2.3.4"] }
+          }
+        }
+      ]
+    },
+    "records/command/plan": {
+      "version": "v1",
+      "effect": "command",
+      "reversible": false,
+      "inp": {
+        "domain": "?str", "current_records": "?str", "desired_records": "?str",
+        "ensure_records": "?str", "remove_records": "?str", "mock_records": "?str", "profile": "?str"
+      },
+      "out": {
+        "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
+        "action": "const:plan", "domain": "str", "currentRecords": "list",
+        "desiredRecords": "list", "diff": "obj",
+        "requiresBackup": "const:true", "requiresConfirm": "const:true", "destructive": "bool"
+      },
+      "errors": ["credentials-missing", "api-error"],
+      "examples": [
+        {
+          "payload": { "domain": "example.com", "expected_a": "1.2.3.4", "mock_records": "A:@:1.2.3.4" },
+          "result": {
+            "ok": true, "connector": "namecheap-dns", "type": "namecheap-dns",
+            "action": "plan", "domain": "example.com", "currentRecords": [], "desiredRecords": [],
+            "diff": { "changed": false, "added": [], "removed": [] },
+            "requiresBackup": true, "requiresConfirm": true, "destructive": false
+          }
+        }
+      ]
+    },
+    "records/command/backup": {
+      "version": "v1",
+      "effect": "command",
+      "reversible": false,
+      "inp": { "domain": "?str", "current_records": "?str", "mock_records": "?str", "backup_dir": "?str", "profile": "?str" },
+      "out": {
+        "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
+        "action": "const:backup", "domain": "str", "backup": "obj"
+      },
+      "errors": ["credentials-missing", "api-error"],
+      "examples": [
+        {
+          "payload": { "domain": "example.com", "mock_records": "A:@:1.2.3.4" },
+          "result": {
+            "ok": true, "connector": "namecheap-dns", "type": "namecheap-dns",
+            "action": "backup", "domain": "example.com",
+            "backup": { "uri": "artifact://namecheap-dns/example.com/backup.json" }
+          }
+        }
+      ]
+    },
+    "records/command/apply": {
+      "version": "v1",
+      "effect": "command",
+      "reversible": true,
+      "inverseRoute": "records/command/apply",
+      "inp": {
+        "domain": "?str", "current_records": "?str", "desired_records": "?str", "plan": "?str",
+        "backup_uri": "?str", "confirm": "?bool", "mock_apply": "?bool",
+        "allow_current_drift": "?bool", "profile": "?str"
+      },
+      "out": {
+        "connector": "const:namecheap-dns", "type": "const:namecheap-dns",
+        "action": "const:apply", "domain": "str", "applied": "bool",
+        "mock": "?bool", "method": "?str", "response": "?obj",
+        "desiredRecords": "?list", "currentRecords": "?list"
+      },
+      "errors": ["confirmation-required", "backup-required", "credentials-missing", "api-error"],
+      "examples": [
+        {
+          "payload": { "domain": "example.com", "backup_uri": "artifact://b", "mock_apply": true },
+          "result": {
+            "ok": true, "connector": "namecheap-dns", "type": "namecheap-dns",
+            "action": "apply", "domain": "example.com", "applied": false, "mock": true,
+            "desiredRecords": [], "currentRecords": []
+          }
+        }
+      ]
+    }
+  },
+  "wires": []
+}
